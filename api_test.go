@@ -1,4 +1,4 @@
-package criodiscovery
+package criodiscover
 
 import (
 	"context"
@@ -11,7 +11,7 @@ func TestPublicAPISurfaceCompiles(t *testing.T) {
 
 	cfg := DefaultConfig()
 	cfg.CRISocketPath = "/var/run/crio/crio.sock"
-	cfg.CachePath = "/tmp/crio-discovery-cache.json"
+	cfg.CachePath = "/tmp/crio-discover-cache.json"
 	cfg.NotificationTTL = time.Minute
 	cfg.Predicates = []Predicate{func(c Container) bool { return c.ID != "" }}
 	cfg.ErrorHandler = func(error) {}

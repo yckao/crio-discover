@@ -1,4 +1,4 @@
-module github.com/yckao/crio-discovery
+module github.com/yckao/crio-discover
 
 go 1.24.0
 

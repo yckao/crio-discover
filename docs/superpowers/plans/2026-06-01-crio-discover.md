@@ -1,8 +1,8 @@
-# CRI-O Discovery Go Library Implementation Plan
+# CRI-O Discover Go Library Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `github.com/yckao/crio-discovery`, a Go library that lists and watches running CRI-O containers through the local CRI socket with metadata, volume inference, predicate filtering, event acceleration, and persistent TTL notification dedupe.
+**Goal:** Build `github.com/yckao/crio-discover`, a Go library that lists and watches running CRI-O containers through the local CRI socket with metadata, volume inference, predicate filtering, event acceleration, and persistent TTL notification dedupe.
 
 **Architecture:** The package exposes an exported `Discoverer` interface returned by `New(Config, ...Option)`. The unexported implementation uses a small internal CRI runtime client interface, a kubelet-volume resolver, and a file-backed TTL cache. Polling is authoritative; CRI events only accelerate discovery between polls.
 
@@ -40,7 +40,7 @@
 Create `go.mod`:
 
 ```go
-module github.com/yckao/crio-discovery
+module github.com/yckao/crio-discover
 
 go 1.24.0
 
@@ -55,7 +55,7 @@ require (
 Create `api_test.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"context"
@@ -68,7 +68,7 @@ func TestPublicAPISurfaceCompiles(t *testing.T) {
 
 	cfg := DefaultConfig()
 	cfg.CRISocketPath = "/var/run/crio/crio.sock"
-	cfg.CachePath = "/tmp/crio-discovery-cache.json"
+	cfg.CachePath = "/tmp/crio-discover-cache.json"
 	cfg.NotificationTTL = time.Minute
 	cfg.Predicates = []Predicate{func(c Container) bool { return c.ID != "" }}
 	cfg.ErrorHandler = func(error) {}
@@ -106,13 +106,13 @@ Expected: FAIL because `Discoverer`, `Container`, `DefaultConfig`, `Predicate`, 
 Create `doc.go`:
 
 ```go
-// Package criodiscovery discovers running CRI-O containers through the
+// Package criodiscover discovers running CRI-O containers through the
 // Kubernetes CRI runtime service on a local unix socket.
 //
 // It provides one-time listing and continuous watching APIs. Continuous
 // watching uses polling as the reliability baseline and can use CRI container
 // events to reduce notification latency when the runtime supports them.
-package criodiscovery
+package criodiscover
 ```
 
 - [ ] **Step 5: Add exported types**
@@ -120,7 +120,7 @@ package criodiscovery
 Create `types.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"context"
@@ -231,7 +231,7 @@ type Volume struct {
 Create `options.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import "time"
 
@@ -284,7 +284,7 @@ Expected: commit succeeds. If git user identity is not configured, run `git stat
 Create `options_test.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"strings"
@@ -375,7 +375,7 @@ Expected: FAIL because option helpers and validation helpers are missing.
 Replace `options.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"fmt"
@@ -508,7 +508,7 @@ Expected: commit succeeds or files remain staged if git identity is missing.
 Create `discoverer_test.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"context"
@@ -620,7 +620,7 @@ Expected: FAIL because `discoverer`, `runtimeContainer`, `runtimeMount`, `New`, 
 Create `runtime_client.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import "context"
 
@@ -688,7 +688,7 @@ import (
 Create `discoverer.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"context"
@@ -827,7 +827,7 @@ func cloneStringMap(in map[string]string) map[string]string {
 Create `volume.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 type kubeletVolumeResolver struct {
 	root string
@@ -845,7 +845,7 @@ func (r *kubeletVolumeResolver) Resolve(string, []runtimeMount) []Volume {
 Create `runtime_grpc.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import "context"
 
@@ -873,7 +873,7 @@ func (*grpcRuntimeClient) Close() error { return nil }
 Create `watch.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"context"
@@ -929,7 +929,7 @@ Expected: commit succeeds or files remain staged if git identity is missing.
 Create `volume_test.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"path/filepath"
@@ -1013,7 +1013,7 @@ Expected: FAIL because `Resolve` returns nil.
 Replace `volume.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"path/filepath"
@@ -1135,7 +1135,7 @@ Expected: commit succeeds or files remain staged if git identity is missing.
 Create `cache_test.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"encoding/json"
@@ -1245,7 +1245,7 @@ Expected: FAIL because cache types and constructors are missing.
 Create `cache.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"encoding/json"
@@ -1407,7 +1407,7 @@ Expected: commit succeeds or files remain staged if git identity is missing.
 Create `fake_runtime_test.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"context"
@@ -1576,7 +1576,7 @@ Expected: commit succeeds or files remain staged if git identity is missing.
 Create `watch_test.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"context"
@@ -1718,7 +1718,7 @@ Expected: FAIL because `Watch` returns the skeleton error.
 Replace `watch.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"context"
@@ -2051,7 +2051,7 @@ Expected: commit succeeds or files remain staged if git identity is missing.
 Create `runtime_grpc_test.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"testing"
@@ -2129,7 +2129,7 @@ Expected: FAIL because mapping helpers do not exist.
 Replace `runtime_grpc.go`:
 
 ```go
-package criodiscovery
+package criodiscover
 
 import (
 	"context"
@@ -2326,14 +2326,14 @@ Expected: commit succeeds or files remain staged if git identity is missing.
 
 **Files:**
 - Create: `README.md`
-- Modify: `docs/superpowers/specs/2026-06-01-crio-discovery-design.md` only if implementation intentionally differs from the spec.
+- Modify: `docs/superpowers/specs/2026-06-01-crio-discover-design.md` only if implementation intentionally differs from the spec.
 
 - [ ] **Step 1: Write README**
 
 Create `README.md`:
 
 ```markdown
-# crio-discovery
+# crio-discover
 
 Go library for discovering running CRI-O containers through the local Kubernetes CRI socket.
 
@@ -2357,17 +2357,17 @@ import (
     "log"
     "time"
 
-    discovery "github.com/yckao/crio-discovery"
+    "github.com/yckao/crio-discover"
 )
 
 func main() {
-    cfg := discovery.DefaultConfig()
-    d, err := discovery.New(cfg,
-        discovery.WithCache("/var/lib/crio-discovery/cache.json", time.Hour),
-        discovery.WithPredicate(func(c discovery.Container) bool {
+    cfg := criodiscover.DefaultConfig()
+    d, err := criodiscover.New(cfg,
+        criodiscover.WithCache("/var/lib/crio-discover/cache.json", time.Hour),
+        criodiscover.WithPredicate(func(c criodiscover.Container) bool {
             return c.Kubernetes.Namespace == "default"
         }),
-        discovery.WithErrorHandler(func(err error) {
+        criodiscover.WithErrorHandler(func(err error) {
             log.Printf("recoverable discovery error: %v", err)
         }),
     )
@@ -2375,7 +2375,7 @@ func main() {
         log.Fatal(err)
     }
 
-    err = d.Watch(context.Background(), func(ctx context.Context, c discovery.Container) error {
+    err = d.Watch(context.Background(), func(ctx context.Context, c criodiscover.Container) error {
         log.Printf("container %s image=%s volumes=%d", c.ID, c.Image, len(c.Volumes))
         return nil
     })
@@ -2410,7 +2410,7 @@ Run:
 
 ```bash
 go test -run TestPublicAPISurfaceCompiles ./...
-go doc github.com/yckao/crio-discovery.Discoverer
+go doc github.com/yckao/crio-discover.Discoverer
 ```
 
 Expected: `go test` PASS, and `go doc` prints the `Discoverer` interface with `List`, `Watch`, and `WatchChan`.
@@ -2430,8 +2430,8 @@ Expected: no matches.
 Run:
 
 ```bash
-git add README.md docs/superpowers/specs/2026-06-01-crio-discovery-design.md
-git commit -m "docs: add crio discovery usage"
+git add README.md docs/superpowers/specs/2026-06-01-crio-discover-design.md
+git commit -m "docs: add crio discover usage"
 ```
 
 Expected: commit succeeds or files remain staged if git identity is missing.

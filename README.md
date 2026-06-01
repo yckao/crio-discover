@@ -1,4 +1,4 @@
-# crio-discovery
+# crio-discover
 
 Go library for discovering running CRI-O containers through the local Kubernetes CRI socket.
 
@@ -22,17 +22,17 @@ import (
     "log"
     "time"
 
-    discovery "github.com/yckao/crio-discovery"
+    "github.com/yckao/crio-discover"
 )
 
 func main() {
-    cfg := discovery.DefaultConfig()
-    d, err := discovery.New(cfg,
-        discovery.WithCache("/var/lib/crio-discovery/cache.json", time.Hour),
-        discovery.WithPredicate(func(c discovery.Container) bool {
+    cfg := criodiscover.DefaultConfig()
+    d, err := criodiscover.New(cfg,
+        criodiscover.WithCache("/var/lib/crio-discover/cache.json", time.Hour),
+        criodiscover.WithPredicate(func(c criodiscover.Container) bool {
             return c.Kubernetes.Namespace == "default"
         }),
-        discovery.WithErrorHandler(func(err error) {
+        criodiscover.WithErrorHandler(func(err error) {
             log.Printf("recoverable discovery error: %v", err)
         }),
     )
@@ -41,7 +41,7 @@ func main() {
     }
     defer d.Close()
 
-    err = d.Watch(context.Background(), func(ctx context.Context, c discovery.Container) error {
+    err = d.Watch(context.Background(), func(ctx context.Context, c criodiscover.Container) error {
         log.Printf("container %s image=%s volumes=%d", c.ID, c.Image, len(c.Volumes))
         return nil
     })

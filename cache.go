@@ -1,4 +1,4 @@
-package criodiscovery
+package criodiscover
 
 import (
 	"encoding/json"
