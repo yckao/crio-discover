@@ -124,6 +124,116 @@ func TestWatchReturnsHandlerError(t *testing.T) {
 	}
 }
 
+func TestWatchChanEmitsContainersAndRecoverableErrors(t *testing.T) {
+	client := &fakeRuntimeClient{
+		listed: []runtimeContainer{{ID: "running", State: ContainerStateRunning}},
+		statuses: map[string]runtimeContainer{
+			"running": {ID: "running", Name: "app", State: ContainerStateRunning},
+		},
+	}
+	cfg := DefaultConfig()
+	cfg.EnableEvents = false
+	cfg.PollInterval = time.Hour
+	d := &discoverer{config: cfg, client: client, resolver: staticVolumeResolver{}}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	containers, errs := d.WatchChan(ctx)
+	container, ok := <-containers
+	if !ok {
+		t.Fatal("containers channel closed before discovery")
+	}
+	if container.ID != "running" {
+		t.Fatalf("container = %#v", container)
+	}
+	cancel()
+	for range containers {
+	}
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+}
+
+func TestWatchUsesEventAcceleration(t *testing.T) {
+	client := &fakeRuntimeClient{
+		listed: []runtimeContainer{},
+		statuses: map[string]runtimeContainer{
+			"from-event": {ID: "from-event", Name: "app", State: ContainerStateRunning},
+		},
+		eventStream: &fakeRuntimeEventStream{events: []runtimeEvent{{ContainerID: "from-event", Type: runtimeEventStarted}}},
+	}
+	cfg := DefaultConfig()
+	cfg.EnableEvents = true
+	cfg.PollInterval = time.Hour
+	d := &discoverer{config: cfg, client: client, resolver: staticVolumeResolver{}}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	got := make(chan Container, 1)
+	errc := make(chan error, 1)
+	go func() {
+		errc <- d.Watch(ctx, func(_ context.Context, c Container) error {
+			got <- c
+			cancel()
+			return nil
+		})
+	}()
+
+	select {
+	case container := <-got:
+		if container.ID != "from-event" {
+			t.Fatalf("container = %#v", container)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("timed out waiting for event accelerated discovery")
+	}
+	if err := <-errc; !errors.Is(err, context.Canceled) {
+		t.Fatalf("Watch error = %v", err)
+	}
+}
+
+func TestEventWatcherFailureIsRecoverable(t *testing.T) {
+	eventErr := errors.New("event stream failed")
+	client := &fakeRuntimeClient{
+		listed:      []runtimeContainer{},
+		statuses:    map[string]runtimeContainer{},
+		eventStream: &fakeRuntimeEventStream{err: eventErr},
+	}
+	cfg := DefaultConfig()
+	cfg.EnableEvents = true
+	cfg.PollInterval = 10 * time.Millisecond
+	reported := make(chan error, 1)
+	cfg.ErrorHandler = func(err error) {
+		select {
+		case reported <- err:
+		default:
+		}
+	}
+	d := &discoverer{config: cfg, client: client, resolver: staticVolumeResolver{}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	errc := make(chan error, 1)
+	go func() {
+		errc <- d.Watch(ctx, func(context.Context, Container) error { return nil })
+	}()
+
+	select {
+	case err := <-reported:
+		if !errors.Is(err, eventErr) {
+			t.Fatalf("reported error = %v, want %v", err, eventErr)
+		}
+	case err := <-errc:
+		t.Fatalf("Watch returned before reporting event error: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for event error")
+	}
+	if err := <-errc; !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Watch error = %v", err)
+	}
+}
+
 func TestWatchStopsScanAfterHandlerCancelsContext(t *testing.T) {
 	client := &fakeRuntimeClient{
 		listed: []runtimeContainer{
