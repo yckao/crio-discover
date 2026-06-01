@@ -91,36 +91,73 @@ func (s *fileDedupeStore) Mark(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now()
-	s.entries[id] = fileCacheEntry{LastNotifiedAt: now, ExpiresAt: now.Add(s.ttl)}
-	s.pruneLocked(now)
-	return s.saveLocked()
+	staged := cloneFileCacheEntries(s.entries)
+	staged[id] = fileCacheEntry{LastNotifiedAt: now, ExpiresAt: now.Add(s.ttl)}
+	pruneFileCacheEntries(staged, now)
+	if err := s.saveLocked(staged); err != nil {
+		return err
+	}
+	s.entries = staged
+	return nil
 }
 
 func (s *fileDedupeStore) Close() error { return nil }
 
 func (s *fileDedupeStore) pruneLocked(now time.Time) {
-	for id, entry := range s.entries {
+	pruneFileCacheEntries(s.entries, now)
+}
+
+func cloneFileCacheEntries(entries map[string]fileCacheEntry) map[string]fileCacheEntry {
+	cloned := make(map[string]fileCacheEntry, len(entries))
+	for id, entry := range entries {
+		cloned[id] = entry
+	}
+	return cloned
+}
+
+func pruneFileCacheEntries(entries map[string]fileCacheEntry, now time.Time) {
+	for id, entry := range entries {
 		if !entry.ExpiresAt.After(now) {
-			delete(s.entries, id)
+			delete(entries, id)
 		}
 	}
 }
 
-func (s *fileDedupeStore) saveLocked() error {
-	payload := fileCachePayload{Version: 1, Entries: s.entries}
+func (s *fileDedupeStore) saveLocked(entries map[string]fileCacheEntry) error {
+	payload := fileCachePayload{Version: 1, Entries: entries}
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode cache %s: %w", s.path, err)
 	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return fmt.Errorf("create cache directory %s: %w", filepath.Dir(s.path), err)
+	dir := filepath.Dir(s.path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create cache directory %s: %w", dir, err)
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("write cache temp file %s: %w", tmp, err)
+	tmp, err := os.CreateTemp(dir, filepath.Base(s.path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("create cache temp file in %s: %w", dir, err)
 	}
-	if err := os.Rename(tmp, s.path); err != nil {
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("chmod cache temp file %s: %w", tmpPath, err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write cache temp file %s: %w", tmpPath, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close cache temp file %s: %w", tmpPath, err)
+	}
+	if err := os.Rename(tmpPath, s.path); err != nil {
 		return fmt.Errorf("replace cache file %s: %w", s.path, err)
 	}
+	cleanup = false
 	return nil
 }
