@@ -55,6 +55,33 @@ func TestVolumeResolverHandlesVolumeSubpaths(t *testing.T) {
 	}
 }
 
+func TestVolumeResolverEmptyRootDoesNotClassifyRelativePaths(t *testing.T) {
+	podUID := "pod-uid"
+	resolver := newKubeletVolumeResolver("")
+	hostPath := filepath.Join("pods", podUID, "volumes", "kubernetes.io~secret", "name")
+	volumes := resolver.Resolve(podUID, []runtimeMount{{HostPath: hostPath, ContainerPath: "/etc/secret"}})
+	if len(volumes) != 1 {
+		t.Fatalf("volumes = %d", len(volumes))
+	}
+	if volumes[0].Type != VolumeTypeUnknown || volumes[0].Name != "" || volumes[0].Source != "" {
+		t.Fatalf("volume = %#v", volumes[0])
+	}
+}
+
+func TestVolumeResolverPreservesUnsupportedPluginNameAndSource(t *testing.T) {
+	root := t.TempDir()
+	podUID := "pod-uid"
+	resolver := newKubeletVolumeResolver(root)
+	hostPath := filepath.Join(root, "pods", podUID, "volumes", "kubernetes.io~nfs", "share")
+	volumes := resolver.Resolve(podUID, []runtimeMount{{HostPath: hostPath, ContainerPath: "/data"}})
+	if len(volumes) != 1 {
+		t.Fatalf("volumes = %d", len(volumes))
+	}
+	if volumes[0].Type != VolumeTypeUnknown || volumes[0].Name != "share" || volumes[0].Source != "kubernetes.io~nfs" {
+		t.Fatalf("volume = %#v", volumes[0])
+	}
+}
+
 func TestVolumeResolverFallsBackToUnknown(t *testing.T) {
 	resolver := newKubeletVolumeResolver("/var/lib/kubelet")
 	volumes := resolver.Resolve("", []runtimeMount{{HostPath: "/opt/data", ContainerPath: "/data"}})

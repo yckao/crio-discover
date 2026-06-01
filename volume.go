@@ -10,6 +10,9 @@ type kubeletVolumeResolver struct {
 }
 
 func newKubeletVolumeResolver(root string) *kubeletVolumeResolver {
+	if root == "" {
+		return &kubeletVolumeResolver{root: ""}
+	}
 	return &kubeletVolumeResolver{root: filepath.Clean(root)}
 }
 
@@ -78,7 +81,7 @@ func volumeTypeForPlugin(plugin string) VolumeType {
 		return VolumeTypeProjected
 	case "kubernetes.io~downward-api":
 		return VolumeTypeDownwardAPI
-	case "kubernetes.io~csi", "kubernetes.io~aws-ebs", "kubernetes.io~gce-pd", "kubernetes.io~azure-disk", "kubernetes.io~azure-file", "kubernetes.io~nfs", "kubernetes.io~rbd", "kubernetes.io~cephfs":
+	case "kubernetes.io~csi":
 		return VolumeTypePersistentVolumeClaim
 	default:
 		return VolumeTypeUnknown
