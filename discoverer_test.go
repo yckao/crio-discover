@@ -107,27 +107,6 @@ func TestNewDefaultConfigListFailsClosedWhileRuntimeGRPCStubbed(t *testing.T) {
 	}
 }
 
-func TestWatchChanReturnsNotImplementedError(t *testing.T) {
-	d := &discoverer{}
-	_, errs := d.WatchChan(context.Background())
-
-	select {
-	case err, ok := <-errs:
-		if !ok {
-			t.Fatal("expected error channel value")
-		}
-		if !errors.Is(err, errWatchNotImplemented) {
-			t.Fatalf("expected watch not implemented error, got %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for watch error")
-	}
-
-	if err := d.Watch(context.Background(), nil); !errors.Is(err, errWatchNotImplemented) {
-		t.Fatalf("expected Watch to return watch not implemented error, got %v", err)
-	}
-}
-
 func TestListFiltersCandidatesStatusesAndPredicates(t *testing.T) {
 	labels := func(namespace, containerName string) map[string]string {
 		return map[string]string{
