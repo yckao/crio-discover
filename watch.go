@@ -50,6 +50,9 @@ func (d *discoverer) watch(ctx context.Context, handler Handler, report func(err
 	if d.client == nil {
 		return errors.New("runtime client is nil")
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	cache, err := newDedupeStore(d.config)
 	if err != nil {
 		return err
@@ -87,8 +90,14 @@ func (d *discoverer) watch(ctx context.Context, handler Handler, report func(err
 }
 
 func (d *discoverer) scanAndHandle(ctx context.Context, cache dedupeStore, handler Handler, report func(error), fatalListError bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	containers, err := d.client.ListContainers(ctx)
 	if err != nil {
+		if isContextError(err) {
+			return err
+		}
 		wrapped := fmt.Errorf("list containers: %w", err)
 		if fatalListError {
 			return wrapped
@@ -97,19 +106,31 @@ func (d *discoverer) scanAndHandle(ctx context.Context, cache dedupeStore, handl
 		return nil
 	}
 	for _, candidate := range containers {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if candidate.State != ContainerStateRunning {
 			continue
 		}
 		if err := d.handleContainerID(ctx, candidate.ID, cache, handler, report); err != nil {
 			return err
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 	}
-	return nil
+	return ctx.Err()
 }
 
 func (d *discoverer) handleContainerID(ctx context.Context, id string, cache dedupeStore, handler Handler, report func(error)) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	status, err := d.client.ContainerStatus(ctx, id)
 	if err != nil {
+		if isContextError(err) {
+			return err
+		}
 		report(fmt.Errorf("container status %s: %w", id, err))
 		return nil
 	}
@@ -123,6 +144,9 @@ func (d *discoverer) handleContainerID(ctx context.Context, id string, cache ded
 	if cache.Seen(container.ID) {
 		return nil
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := handler(ctx, container); err != nil {
 		return err
 	}
@@ -130,6 +154,10 @@ func (d *discoverer) handleContainerID(ctx context.Context, id string, cache ded
 		report(fmt.Errorf("mark notification cache %s: %w", container.ID, err))
 	}
 	return nil
+}
+
+func isContextError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func (d *discoverer) runEventWatcher(ctx context.Context, ids chan<- string, report func(error)) {

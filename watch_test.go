@@ -123,3 +123,141 @@ func TestWatchReturnsHandlerError(t *testing.T) {
 		t.Fatalf("Watch error = %v", err)
 	}
 }
+
+func TestWatchStopsScanAfterHandlerCancelsContext(t *testing.T) {
+	client := &fakeRuntimeClient{
+		listed: []runtimeContainer{
+			{ID: "first", State: ContainerStateRunning},
+			{ID: "second", State: ContainerStateRunning},
+		},
+		statuses: map[string]runtimeContainer{
+			"first":  {ID: "first", Name: "app", State: ContainerStateRunning},
+			"second": {ID: "second", Name: "app", State: ContainerStateRunning},
+		},
+	}
+	cfg := DefaultConfig()
+	cfg.EnableEvents = false
+	cfg.PollInterval = time.Hour
+	d := &discoverer{config: cfg, client: client, resolver: staticVolumeResolver{}}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	handlerCalls := 0
+	err := d.Watch(ctx, func(_ context.Context, c Container) error {
+		handlerCalls++
+		if c.ID != "first" {
+			t.Fatalf("handled container ID = %q, want first", c.ID)
+		}
+		cancel()
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Watch error = %v", err)
+	}
+	if handlerCalls != 1 {
+		t.Fatalf("handler calls = %d, want 1", handlerCalls)
+	}
+
+	client.mu.Lock()
+	statusCalls := append([]string(nil), client.statusCalls...)
+	client.mu.Unlock()
+	if len(statusCalls) != 1 || statusCalls[0] != "first" {
+		t.Fatalf("status calls = %v, want [first]", statusCalls)
+	}
+}
+
+func TestWatchTreatsStatusContextErrorAsTerminal(t *testing.T) {
+	client := &fakeRuntimeClient{
+		listed:    []runtimeContainer{{ID: "running", State: ContainerStateRunning}},
+		statusErr: map[string]error{"running": context.Canceled},
+	}
+	cfg := DefaultConfig()
+	cfg.EnableEvents = false
+	reported := 0
+	cfg.ErrorHandler = func(error) { reported++ }
+	d := &discoverer{config: cfg, client: client, resolver: staticVolumeResolver{}}
+
+	handlerCalls := 0
+	err := d.Watch(context.Background(), func(context.Context, Container) error {
+		handlerCalls++
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Watch error = %v, want context.Canceled", err)
+	}
+	if reported != 0 {
+		t.Fatalf("reported recoverable errors = %d, want 0", reported)
+	}
+	if handlerCalls != 0 {
+		t.Fatalf("handler calls = %d, want 0", handlerCalls)
+	}
+}
+
+func TestWatchCancelsEventWatcherContextOnHandlerError(t *testing.T) {
+	want := errors.New("handler failed")
+	stream := newCancelAwareEventStream(runtimeEvent{ContainerID: "evented", Type: runtimeEventStarted})
+	client := &cancelAwareEventClient{
+		fakeRuntimeClient: fakeRuntimeClient{
+			statuses: map[string]runtimeContainer{
+				"evented": {ID: "evented", Name: "app", State: ContainerStateRunning},
+			},
+		},
+		stream: stream,
+	}
+	cfg := DefaultConfig()
+	cfg.EnableEvents = true
+	cfg.PollInterval = time.Hour
+	d := &discoverer{config: cfg, client: client, resolver: staticVolumeResolver{}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err := d.Watch(ctx, func(context.Context, Container) error { return want })
+	if !errors.Is(err, want) {
+		t.Fatalf("Watch error = %v, want %v", err, want)
+	}
+	select {
+	case <-stream.canceled:
+	case <-time.After(time.Second):
+		t.Fatal("event watcher context was not canceled")
+	}
+}
+
+type cancelAwareEventClient struct {
+	fakeRuntimeClient
+	stream *cancelAwareEventStream
+}
+
+func (c *cancelAwareEventClient) WatchEvents(ctx context.Context) (runtimeEventStream, error) {
+	c.stream.setContext(ctx)
+	return c.stream, nil
+}
+
+type cancelAwareEventStream struct {
+	event runtimeEvent
+
+	ctx       context.Context
+	sent      bool
+	canceled  chan struct{}
+	closeOnce sync.Once
+}
+
+func newCancelAwareEventStream(event runtimeEvent) *cancelAwareEventStream {
+	return &cancelAwareEventStream{event: event, canceled: make(chan struct{})}
+}
+
+func (s *cancelAwareEventStream) setContext(ctx context.Context) {
+	s.ctx = ctx
+}
+
+func (s *cancelAwareEventStream) Recv() (runtimeEvent, error) {
+	if !s.sent {
+		s.sent = true
+		return s.event, nil
+	}
+	if s.ctx == nil {
+		return runtimeEvent{}, errors.New("event stream context not set")
+	}
+	<-s.ctx.Done()
+	s.closeOnce.Do(func() { close(s.canceled) })
+	return runtimeEvent{}, s.ctx.Err()
+}
