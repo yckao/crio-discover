@@ -1,6 +1,9 @@
 package criodiscovery
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Option mutates Config before validation in New.
 type Option func(*Config)
@@ -13,4 +16,81 @@ func DefaultConfig() Config {
 		PollInterval:  30 * time.Second,
 		EnableEvents:  true,
 	}
+}
+
+// WithPredicate appends one predicate.
+func WithPredicate(p Predicate) Option {
+	return func(c *Config) {
+		c.Predicates = append(c.Predicates, p)
+	}
+}
+
+// WithPredicates appends multiple predicates.
+func WithPredicates(predicates ...Predicate) Option {
+	return func(c *Config) {
+		c.Predicates = append(c.Predicates, predicates...)
+	}
+}
+
+// WithPollInterval sets the polling interval used by Watch and WatchChan.
+func WithPollInterval(d time.Duration) Option {
+	return func(c *Config) {
+		c.PollInterval = d
+	}
+}
+
+// WithEvents enables or disables CRI event acceleration.
+func WithEvents(enabled bool) Option {
+	return func(c *Config) {
+		c.EnableEvents = enabled
+	}
+}
+
+// WithCache configures persistent notification dedupe.
+func WithCache(path string, ttl time.Duration) Option {
+	return func(c *Config) {
+		c.CachePath = path
+		c.NotificationTTL = ttl
+	}
+}
+
+// WithErrorHandler configures callback-watch reporting for recoverable errors.
+func WithErrorHandler(h ErrorHandler) Option {
+	return func(c *Config) {
+		c.ErrorHandler = h
+	}
+}
+
+func applyOptions(config *Config, opts ...Option) error {
+	for i, opt := range opts {
+		if opt == nil {
+			return fmt.Errorf("option %d is nil", i)
+		}
+		opt(config)
+	}
+	return validateConfig(*config)
+}
+
+func validateConfig(config Config) error {
+	if config.CRISocketPath == "" {
+		return fmt.Errorf("CRI socket path is required")
+	}
+	if config.KubeletRoot == "" {
+		return fmt.Errorf("kubelet root is required")
+	}
+	if config.PollInterval <= 0 {
+		return fmt.Errorf("poll interval must be positive")
+	}
+	if config.NotificationTTL < 0 {
+		return fmt.Errorf("notification TTL must not be negative")
+	}
+	if config.NotificationTTL > 0 && config.CachePath == "" {
+		return fmt.Errorf("cache path is required when notification TTL is positive")
+	}
+	for i, predicate := range config.Predicates {
+		if predicate == nil {
+			return fmt.Errorf("predicate %d is nil", i)
+		}
+	}
+	return nil
 }
