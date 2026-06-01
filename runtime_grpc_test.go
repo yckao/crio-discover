@@ -1,9 +1,12 @@
 package criodiscovery
 
 import (
+	"errors"
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
@@ -57,5 +60,12 @@ func TestMapRuntimeEvent(t *testing.T) {
 	event := mapRuntimeEvent(&runtimeapi.ContainerEventResponse{ContainerId: "id", ContainerEventType: runtimeapi.ContainerEventType_CONTAINER_STARTED_EVENT})
 	if event.ContainerID != "id" || event.Type != runtimeEventStarted {
 		t.Fatalf("event = %#v", event)
+	}
+}
+
+func TestMapGRPCEventErrorMapsUnimplementedToUnsupported(t *testing.T) {
+	err := mapGRPCEventError(status.Error(codes.Unimplemented, "events unsupported"))
+	if !errors.Is(err, errEventsUnsupported) {
+		t.Fatalf("mapGRPCEventError = %v, want %v", err, errEventsUnsupported)
 	}
 }

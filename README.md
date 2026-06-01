@@ -39,6 +39,7 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
+    defer d.Close()
 
     err = d.Watch(context.Background(), func(ctx context.Context, c discovery.Container) error {
         log.Printf("container %s image=%s volumes=%d", c.ID, c.Image, len(c.Volumes))

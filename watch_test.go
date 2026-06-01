@@ -7,6 +7,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestWatchEmitsExistingRunningContainerOnce(t *testing.T) {
@@ -278,6 +281,66 @@ func TestEventWatcherFailureIsRecoverable(t *testing.T) {
 	}
 }
 
+func TestEventWatcherSuppressesUnimplementedSetupError(t *testing.T) {
+	client := &fakeRuntimeClient{
+		listed:   []runtimeContainer{},
+		statuses: map[string]runtimeContainer{},
+		eventErr: status.Error(codes.Unimplemented, "events unsupported"),
+	}
+	cfg := DefaultConfig()
+	cfg.EnableEvents = true
+	cfg.PollInterval = 10 * time.Millisecond
+	reported := make(chan error, 1)
+	cfg.ErrorHandler = func(err error) {
+		select {
+		case reported <- err:
+		default:
+		}
+	}
+	d := &discoverer{config: cfg, client: client, resolver: staticVolumeResolver{}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	if err := d.Watch(ctx, func(context.Context, Container) error { return nil }); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Watch error = %v", err)
+	}
+	select {
+	case err := <-reported:
+		t.Fatalf("unexpected reported error: %v", err)
+	default:
+	}
+}
+
+func TestEventWatcherSuppressesUnimplementedReceiveError(t *testing.T) {
+	client := &fakeRuntimeClient{
+		listed:      []runtimeContainer{},
+		statuses:    map[string]runtimeContainer{},
+		eventStream: &fakeRuntimeEventStream{err: status.Error(codes.Unimplemented, "events unsupported")},
+	}
+	cfg := DefaultConfig()
+	cfg.EnableEvents = true
+	cfg.PollInterval = 10 * time.Millisecond
+	reported := make(chan error, 1)
+	cfg.ErrorHandler = func(err error) {
+		select {
+		case reported <- err:
+		default:
+		}
+	}
+	d := &discoverer{config: cfg, client: client, resolver: staticVolumeResolver{}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	if err := d.Watch(ctx, func(context.Context, Container) error { return nil }); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Watch error = %v", err)
+	}
+	select {
+	case err := <-reported:
+		t.Fatalf("unexpected reported error: %v", err)
+	default:
+	}
+}
+
 func TestWatchStopsScanAfterHandlerCancelsContext(t *testing.T) {
 	client := &fakeRuntimeClient{
 		listed: []runtimeContainer{
@@ -344,6 +407,17 @@ func TestWatchTreatsStatusContextErrorAsTerminal(t *testing.T) {
 	}
 	if handlerCalls != 0 {
 		t.Fatalf("handler calls = %d, want 0", handlerCalls)
+	}
+}
+
+func TestIsContextErrorRecognizesGRPCStatusCodes(t *testing.T) {
+	for _, err := range []error{
+		status.Error(codes.Canceled, "canceled"),
+		status.Error(codes.DeadlineExceeded, "deadline exceeded"),
+	} {
+		if !isContextError(err) {
+			t.Fatalf("isContextError(%v) = false, want true", err)
+		}
 	}
 }
 

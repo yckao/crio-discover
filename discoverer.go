@@ -32,6 +32,13 @@ func New(config Config, opts ...Option) (Discoverer, error) {
 	}, nil
 }
 
+func (d *discoverer) Close() error {
+	if d.client == nil {
+		return nil
+	}
+	return d.client.Close()
+}
+
 func (d *discoverer) List(ctx context.Context) ([]Container, error) {
 	if d.client == nil {
 		return nil, errors.New("runtime client is nil")

@@ -64,6 +64,7 @@ type Discoverer interface {
     List(ctx context.Context) ([]Container, error)
     Watch(ctx context.Context, handler Handler) error
     WatchChan(ctx context.Context) (<-chan Container, <-chan error)
+    Close() error
 }
 
 func New(config Config, opts ...Option) (Discoverer, error)
@@ -98,6 +99,10 @@ API semantics:
   - channel-based wrapper around the same watch engine;
   - returns a container channel and an error channel;
   - closes channels when the context is canceled or the watch engine exits.
+
+- `Close`
+  - releases the underlying runtime client resources;
+  - should be called when the discoverer is no longer needed.
 
 Functional options:
 

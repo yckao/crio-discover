@@ -6,9 +6,17 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var errEventsUnsupported = errors.New("CRI container events unsupported")
+
+type watchEventMessage struct {
+	containerID string
+	err         error
+}
 
 func (d *discoverer) Watch(ctx context.Context, handler Handler) error {
 	if handler == nil {
@@ -36,7 +44,7 @@ func (d *discoverer) WatchChan(ctx context.Context) (<-chan Container, <-chan er
 			case <-ctx.Done():
 			}
 		})
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		if err != nil && !isContextError(err) {
 			select {
 			case errs <- err:
 			case <-ctx.Done():
@@ -63,9 +71,9 @@ func (d *discoverer) watch(ctx context.Context, handler Handler, report func(err
 		return err
 	}
 
-	events := make(chan string, 128)
+	events := make(chan watchEventMessage, 128)
 	if d.config.EnableEvents {
-		go d.runEventWatcher(ctx, events, report)
+		go d.runEventWatcher(ctx, events)
 	}
 
 	ticker := time.NewTicker(d.config.PollInterval)
@@ -78,11 +86,15 @@ func (d *discoverer) watch(ctx context.Context, handler Handler, report func(err
 			if err := d.scanAndHandle(ctx, cache, handler, report, false); err != nil {
 				return err
 			}
-		case id := <-events:
-			if id == "" {
+		case event := <-events:
+			if event.err != nil {
+				report(event.err)
 				continue
 			}
-			if err := d.handleContainerID(ctx, id, "", cache, handler, report); err != nil {
+			if event.containerID == "" {
+				continue
+			}
+			if err := d.handleContainerID(ctx, event.containerID, "", cache, handler, report); err != nil {
 				return err
 			}
 		}
@@ -160,34 +172,54 @@ func (d *discoverer) handleContainerID(ctx context.Context, id, fallbackSandboxI
 }
 
 func isContextError(err error) bool {
-	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	switch status.Code(err) {
+	case codes.Canceled, codes.DeadlineExceeded:
+		return true
+	default:
+		return false
+	}
 }
 
-func (d *discoverer) runEventWatcher(ctx context.Context, ids chan<- string, report func(error)) {
+func isEventsUnsupported(err error) bool {
+	return errors.Is(err, errEventsUnsupported) || status.Code(err) == codes.Unimplemented
+}
+
+func (d *discoverer) runEventWatcher(ctx context.Context, events chan<- watchEventMessage) {
 	stream, err := d.client.WatchEvents(ctx)
 	if err != nil {
-		if !errors.Is(err, errEventsUnsupported) {
-			report(fmt.Errorf("watch CRI events: %w", err))
+		if ctx.Err() != nil || isContextError(err) || isEventsUnsupported(err) {
+			return
 		}
+		sendWatchEvent(ctx, events, watchEventMessage{err: fmt.Errorf("watch CRI events: %w", err)})
 		return
 	}
 	for {
 		event, err := stream.Recv()
 		if err != nil {
-			if ctx.Err() != nil || errors.Is(err, io.EOF) {
+			if ctx.Err() != nil || errors.Is(err, io.EOF) || isContextError(err) || isEventsUnsupported(err) {
 				return
 			}
-			report(fmt.Errorf("receive CRI event: %w", err))
+			sendWatchEvent(ctx, events, watchEventMessage{err: fmt.Errorf("receive CRI event: %w", err)})
 			return
 		}
 		if event.Type != runtimeEventCreated && event.Type != runtimeEventStarted {
 			continue
 		}
-		select {
-		case ids <- event.ContainerID:
-		case <-ctx.Done():
+		if !sendWatchEvent(ctx, events, watchEventMessage{containerID: event.ContainerID}) {
 			return
 		}
+	}
+}
+
+func sendWatchEvent(ctx context.Context, events chan<- watchEventMessage, event watchEventMessage) bool {
+	select {
+	case events <- event:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 

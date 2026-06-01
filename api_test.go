@@ -32,3 +32,5 @@ func (*fakeDiscovererForAPITest) WatchChan(context.Context) (<-chan Container, <
 	close(errs)
 	return containers, errs
 }
+
+func (*fakeDiscovererForAPITest) Close() error { return nil }

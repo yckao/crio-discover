@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
@@ -50,7 +52,7 @@ func (c *grpcRuntimeClient) ContainerStatus(ctx context.Context, id string) (run
 func (c *grpcRuntimeClient) WatchEvents(ctx context.Context) (runtimeEventStream, error) {
 	stream, err := c.client.GetContainerEvents(ctx, &runtimeapi.GetEventsRequest{})
 	if err != nil {
-		return nil, err
+		return nil, mapGRPCEventError(err)
 	}
 	return &grpcRuntimeEventStream{stream: stream}, nil
 }
@@ -69,9 +71,19 @@ type grpcRuntimeEventStream struct {
 func (s *grpcRuntimeEventStream) Recv() (runtimeEvent, error) {
 	resp, err := s.stream.Recv()
 	if err != nil {
-		return runtimeEvent{}, err
+		return runtimeEvent{}, mapGRPCEventError(err)
 	}
 	return mapRuntimeEvent(resp), nil
+}
+
+func mapGRPCEventError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if status.Code(err) == codes.Unimplemented {
+		return errEventsUnsupported
+	}
+	return err
 }
 
 func mapRuntimeContainer(container *runtimeapi.Container) runtimeContainer {

@@ -96,6 +96,20 @@ func TestListRequiresRuntimeClient(t *testing.T) {
 	}
 }
 
+func TestCloseCallsRuntimeClient(t *testing.T) {
+	client := &fakeRuntimeClient{}
+	d := &discoverer{config: DefaultConfig(), client: client, resolver: staticVolumeResolver{}}
+	if err := d.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	client.mu.Lock()
+	closed := client.closed
+	client.mu.Unlock()
+	if !closed {
+		t.Fatal("runtime client was not closed")
+	}
+}
+
 func TestListFiltersCandidatesStatusesAndPredicates(t *testing.T) {
 	labels := func(namespace, containerName string) map[string]string {
 		return map[string]string{

@@ -11,6 +11,7 @@ type Discoverer interface {
 	List(ctx context.Context) ([]Container, error)
 	Watch(ctx context.Context, handler Handler) error
 	WatchChan(ctx context.Context) (<-chan Container, <-chan error)
+	Close() error
 }
 
 // Handler receives deduplicated container discoveries from Watch.
