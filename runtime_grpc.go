@@ -1,6 +1,11 @@
 package criodiscovery
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+var errRuntimeClientNotImplemented = errors.New("grpc runtime client is not implemented")
 
 type grpcRuntimeClient struct{}
 
@@ -9,11 +14,11 @@ func newGRPCRuntimeClient(string) (runtimeClient, error) {
 }
 
 func (*grpcRuntimeClient) ListContainers(context.Context) ([]runtimeContainer, error) {
-	return nil, nil
+	return nil, errRuntimeClientNotImplemented
 }
 
 func (*grpcRuntimeClient) ContainerStatus(context.Context, string) (runtimeContainer, error) {
-	return runtimeContainer{}, nil
+	return runtimeContainer{}, errRuntimeClientNotImplemented
 }
 
 func (*grpcRuntimeClient) WatchEvents(context.Context) (runtimeEventStream, error) {
