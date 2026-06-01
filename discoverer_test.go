@@ -142,7 +142,7 @@ func TestListFiltersCandidatesStatusesAndPredicates(t *testing.T) {
 		func(c Container) bool { return c.Kubernetes.Namespace == "target" },
 	}
 	client := &fakeRuntimeClient{
-		containers: []runtimeContainer{
+		listed: []runtimeContainer{
 			{ID: "keep", PodSandboxID: "sandbox-keep", State: ContainerStateRunning},
 			{ID: "stopped-candidate", PodSandboxID: "sandbox-stopped", State: ContainerStateExited},
 			{ID: "filtered", PodSandboxID: "sandbox-filtered", State: ContainerStateRunning},
@@ -215,8 +215,8 @@ func TestListFiltersCandidatesStatusesAndPredicates(t *testing.T) {
 func TestListWrapsStatusErrorsWithContainerID(t *testing.T) {
 	statusErr := errors.New("status failed")
 	client := &fakeRuntimeClient{
-		containers: []runtimeContainer{{ID: "broken", State: ContainerStateRunning}},
-		statusErrs: map[string]error{"broken": statusErr},
+		listed:    []runtimeContainer{{ID: "broken", State: ContainerStateRunning}},
+		statusErr: map[string]error{"broken": statusErr},
 	}
 	d := &discoverer{config: DefaultConfig(), client: client, resolver: staticVolumeResolver{}}
 
@@ -232,32 +232,40 @@ func TestListWrapsStatusErrorsWithContainerID(t *testing.T) {
 	}
 }
 
-type fakeRuntimeClient struct {
-	containers  []runtimeContainer
-	statuses    map[string]runtimeContainer
-	statusErrs  map[string]error
-	listErr     error
-	statusCalls []string
-}
-
-func (f *fakeRuntimeClient) ListContainers(context.Context) ([]runtimeContainer, error) {
-	return f.containers, f.listErr
-}
-
-func (f *fakeRuntimeClient) ContainerStatus(_ context.Context, id string) (runtimeContainer, error) {
-	f.statusCalls = append(f.statusCalls, id)
-	if err := f.statusErrs[id]; err != nil {
-		return runtimeContainer{}, err
+func TestListReturnsRunningMatchingContainers(t *testing.T) {
+	client := &fakeRuntimeClient{
+		listed: []runtimeContainer{
+			{ID: "running", State: ContainerStateRunning},
+			{ID: "exited", State: ContainerStateExited},
+		},
+		statuses: map[string]runtimeContainer{
+			"running": {ID: "running", Name: "app", Image: "app:v1", State: ContainerStateRunning, Labels: map[string]string{"io.kubernetes.pod.namespace": "default"}},
+			"exited":  {ID: "exited", Name: "old", State: ContainerStateExited},
+		},
 	}
-	status, ok := f.statuses[id]
-	if !ok {
-		return runtimeContainer{}, errors.New("missing container status")
+	d := &discoverer{
+		config:   Config{Predicates: []Predicate{func(c Container) bool { return c.Kubernetes.Namespace == "default" }}},
+		client:   client,
+		resolver: staticVolumeResolver{},
 	}
-	return status, nil
+	containers, err := d.List(context.Background())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(containers) != 1 || containers[0].ID != "running" || containers[0].Image != "app:v1" {
+		t.Fatalf("containers = %#v", containers)
+	}
 }
 
-func (f *fakeRuntimeClient) WatchEvents(context.Context) (runtimeEventStream, error) {
-	return nil, errEventsUnsupported
+func TestListReturnsStatusError(t *testing.T) {
+	client := &fakeRuntimeClient{
+		listed:    []runtimeContainer{{ID: "running", State: ContainerStateRunning}},
+		statuses:  map[string]runtimeContainer{},
+		statusErr: map[string]error{"running": errors.New("boom")},
+	}
+	d := &discoverer{config: DefaultConfig(), client: client, resolver: staticVolumeResolver{}}
+	_, err := d.List(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "container status running") {
+		t.Fatalf("expected status error, got %v", err)
+	}
 }
-
-func (f *fakeRuntimeClient) Close() error { return nil }
