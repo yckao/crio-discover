@@ -37,6 +37,50 @@ func TestWatchEmitsExistingRunningContainerOnce(t *testing.T) {
 	}
 }
 
+func TestWatchPreservesListedPodSandboxIDWhenStatusOmitsIt(t *testing.T) {
+	client := &fakeRuntimeClient{
+		listed: []runtimeContainer{{ID: "running", PodSandboxID: "sandbox-from-list", State: ContainerStateRunning}},
+		statuses: map[string]runtimeContainer{
+			"running": {
+				ID:    "running",
+				Name:  "app",
+				State: ContainerStateRunning,
+				Labels: map[string]string{
+					"io.kubernetes.pod.namespace":  "default",
+					"io.kubernetes.pod.name":       "demo",
+					"io.kubernetes.pod.uid":        "pod-uid",
+					"io.kubernetes.container.name": "app",
+				},
+			},
+		},
+	}
+	cfg := DefaultConfig()
+	cfg.EnableEvents = false
+	cfg.PollInterval = time.Hour
+	d := &discoverer{config: cfg, client: client, resolver: staticVolumeResolver{}}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var got []Container
+	err := d.Watch(ctx, func(_ context.Context, c Container) error {
+		got = append(got, c)
+		cancel()
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Watch error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got = %#v, want one container", got)
+	}
+	if got[0].PodID != "sandbox-from-list" {
+		t.Fatalf("PodID = %q, want sandbox-from-list", got[0].PodID)
+	}
+	if got[0].Kubernetes.SandboxID != "sandbox-from-list" {
+		t.Fatalf("Kubernetes.SandboxID = %q, want sandbox-from-list", got[0].Kubernetes.SandboxID)
+	}
+}
+
 func TestWatchSuppressesDuplicateNotificationsAcrossRestart(t *testing.T) {
 	cachePath := filepath.Join(t.TempDir(), "cache.json")
 	client := &fakeRuntimeClient{

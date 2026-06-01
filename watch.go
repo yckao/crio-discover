@@ -82,7 +82,7 @@ func (d *discoverer) watch(ctx context.Context, handler Handler, report func(err
 			if id == "" {
 				continue
 			}
-			if err := d.handleContainerID(ctx, id, cache, handler, report); err != nil {
+			if err := d.handleContainerID(ctx, id, "", cache, handler, report); err != nil {
 				return err
 			}
 		}
@@ -112,7 +112,7 @@ func (d *discoverer) scanAndHandle(ctx context.Context, cache dedupeStore, handl
 		if candidate.State != ContainerStateRunning {
 			continue
 		}
-		if err := d.handleContainerID(ctx, candidate.ID, cache, handler, report); err != nil {
+		if err := d.handleContainerID(ctx, candidate.ID, candidate.PodSandboxID, cache, handler, report); err != nil {
 			return err
 		}
 		if err := ctx.Err(); err != nil {
@@ -122,7 +122,7 @@ func (d *discoverer) scanAndHandle(ctx context.Context, cache dedupeStore, handl
 	return ctx.Err()
 }
 
-func (d *discoverer) handleContainerID(ctx context.Context, id string, cache dedupeStore, handler Handler, report func(error)) error {
+func (d *discoverer) handleContainerID(ctx context.Context, id, fallbackSandboxID string, cache dedupeStore, handler Handler, report func(error)) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -136,6 +136,9 @@ func (d *discoverer) handleContainerID(ctx context.Context, id string, cache ded
 	}
 	if status.State != ContainerStateRunning {
 		return nil
+	}
+	if status.PodSandboxID == "" {
+		status.PodSandboxID = fallbackSandboxID
 	}
 	container := d.containerFromRuntime(status)
 	if !d.matches(container) {
