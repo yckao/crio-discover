@@ -55,7 +55,7 @@ require (
 Create `api_test.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"context"
@@ -106,13 +106,13 @@ Expected: FAIL because `Discoverer`, `Container`, `DefaultConfig`, `Predicate`, 
 Create `doc.go`:
 
 ```go
-// Package criodiscover discovers running CRI-O containers through the
+// Package discover discovers running CRI-O containers through the
 // Kubernetes CRI runtime service on a local unix socket.
 //
 // It provides one-time listing and continuous watching APIs. Continuous
 // watching uses polling as the reliability baseline and can use CRI container
 // events to reduce notification latency when the runtime supports them.
-package criodiscover
+package discover
 ```
 
 - [ ] **Step 5: Add exported types**
@@ -120,7 +120,7 @@ package criodiscover
 Create `types.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"context"
@@ -231,7 +231,7 @@ type Volume struct {
 Create `options.go`:
 
 ```go
-package criodiscover
+package discover
 
 import "time"
 
@@ -284,7 +284,7 @@ Expected: commit succeeds. If git user identity is not configured, run `git stat
 Create `options_test.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"strings"
@@ -375,7 +375,7 @@ Expected: FAIL because option helpers and validation helpers are missing.
 Replace `options.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"fmt"
@@ -508,7 +508,7 @@ Expected: commit succeeds or files remain staged if git identity is missing.
 Create `discoverer_test.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"context"
@@ -620,7 +620,7 @@ Expected: FAIL because `discoverer`, `runtimeContainer`, `runtimeMount`, `New`, 
 Create `runtime_client.go`:
 
 ```go
-package criodiscover
+package discover
 
 import "context"
 
@@ -688,7 +688,7 @@ import (
 Create `discoverer.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"context"
@@ -827,7 +827,7 @@ func cloneStringMap(in map[string]string) map[string]string {
 Create `volume.go`:
 
 ```go
-package criodiscover
+package discover
 
 type kubeletVolumeResolver struct {
 	root string
@@ -845,7 +845,7 @@ func (r *kubeletVolumeResolver) Resolve(string, []runtimeMount) []Volume {
 Create `runtime_grpc.go`:
 
 ```go
-package criodiscover
+package discover
 
 import "context"
 
@@ -873,7 +873,7 @@ func (*grpcRuntimeClient) Close() error { return nil }
 Create `watch.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"context"
@@ -929,7 +929,7 @@ Expected: commit succeeds or files remain staged if git identity is missing.
 Create `volume_test.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"path/filepath"
@@ -1013,7 +1013,7 @@ Expected: FAIL because `Resolve` returns nil.
 Replace `volume.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"path/filepath"
@@ -1135,7 +1135,7 @@ Expected: commit succeeds or files remain staged if git identity is missing.
 Create `cache_test.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"encoding/json"
@@ -1245,7 +1245,7 @@ Expected: FAIL because cache types and constructors are missing.
 Create `cache.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"encoding/json"
@@ -1407,7 +1407,7 @@ Expected: commit succeeds or files remain staged if git identity is missing.
 Create `fake_runtime_test.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"context"
@@ -1576,7 +1576,7 @@ Expected: commit succeeds or files remain staged if git identity is missing.
 Create `watch_test.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"context"
@@ -1718,7 +1718,7 @@ Expected: FAIL because `Watch` returns the skeleton error.
 Replace `watch.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"context"
@@ -2051,7 +2051,7 @@ Expected: commit succeeds or files remain staged if git identity is missing.
 Create `runtime_grpc_test.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"testing"
@@ -2129,7 +2129,7 @@ Expected: FAIL because mapping helpers do not exist.
 Replace `runtime_grpc.go`:
 
 ```go
-package criodiscover
+package discover
 
 import (
 	"context"
@@ -2361,13 +2361,13 @@ import (
 )
 
 func main() {
-    cfg := criodiscover.DefaultConfig()
-    d, err := criodiscover.New(cfg,
-        criodiscover.WithCache("/var/lib/crio-discover/cache.json", time.Hour),
-        criodiscover.WithPredicate(func(c criodiscover.Container) bool {
+    cfg := discover.DefaultConfig()
+    d, err := discover.New(cfg,
+        discover.WithCache("/var/lib/crio-discover/cache.json", time.Hour),
+        discover.WithPredicate(func(c discover.Container) bool {
             return c.Kubernetes.Namespace == "default"
         }),
-        criodiscover.WithErrorHandler(func(err error) {
+        discover.WithErrorHandler(func(err error) {
             log.Printf("recoverable discovery error: %v", err)
         }),
     )
@@ -2375,7 +2375,7 @@ func main() {
         log.Fatal(err)
     }
 
-    err = d.Watch(context.Background(), func(ctx context.Context, c criodiscover.Container) error {
+    err = d.Watch(context.Background(), func(ctx context.Context, c discover.Container) error {
         log.Printf("container %s image=%s volumes=%d", c.ID, c.Image, len(c.Volumes))
         return nil
     })

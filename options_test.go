@@ -1,4 +1,4 @@
-package criodiscover
+package discover
 
 import (
 	"strings"

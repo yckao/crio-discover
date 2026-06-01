@@ -1,4 +1,4 @@
-package criodiscover_test
+package discover_test
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 )
 
 func TestProjectRenameExposesNewModuleAndPackageName(t *testing.T) {
-	cfg := criodiscover.DefaultConfig()
+	cfg := discover.DefaultConfig()
 	if cfg.CRISocketPath == "" {
 		t.Fatal("default config must have a CRI socket path")
 	}

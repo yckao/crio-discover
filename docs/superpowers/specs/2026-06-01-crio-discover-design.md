@@ -247,11 +247,11 @@ Rules:
 Example:
 
 ```go
-d, err := criodiscover.New(criodiscover.DefaultConfig(),
-    criodiscover.WithPredicate(func(c criodiscover.Container) bool {
+d, err := discover.New(discover.DefaultConfig(),
+    discover.WithPredicate(func(c discover.Container) bool {
         return c.Kubernetes.Namespace == "default"
     }),
-    criodiscover.WithPredicate(func(c criodiscover.Container) bool {
+    discover.WithPredicate(func(c discover.Container) bool {
         return !strings.HasPrefix(c.Image, "pause:")
     }),
 )
