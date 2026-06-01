@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestContainerFromRuntimeParsesKubernetesMetadata(t *testing.T) {
@@ -112,6 +115,14 @@ func TestListRequiresRuntimeClient(t *testing.T) {
 	_, err := d.List(context.Background())
 	if err == nil {
 		t.Fatal("expected missing runtime client error")
+	}
+}
+
+func TestListRejectsNilContext(t *testing.T) {
+	d := &discoverer{config: DefaultConfig(), client: &fakeRuntimeClient{}, resolver: staticVolumeResolver{}}
+	_, err := d.List(nil)
+	if !errors.Is(err, ErrNilContext) {
+		t.Fatalf("List error = %v, want %v", err, ErrNilContext)
 	}
 }
 
@@ -282,6 +293,28 @@ func TestListWrapsStatusErrorsWithContainerID(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "container status broken") {
 		t.Fatalf("error %q does not contain container status ID", err.Error())
+	}
+}
+
+func TestListSkipsContainersGoneBeforeStatus(t *testing.T) {
+	client := &fakeRuntimeClient{
+		listed: []runtimeContainer{
+			{ID: "gone", State: ContainerStateRunning},
+			{ID: "keep", State: ContainerStateRunning},
+		},
+		statuses: map[string]runtimeContainer{
+			"keep": {ID: "keep", Name: "app", State: ContainerStateRunning},
+		},
+		statusErr: map[string]error{"gone": status.Error(codes.NotFound, "container removed")},
+	}
+	d := &discoverer{config: DefaultConfig(), client: client, resolver: staticVolumeResolver{}}
+
+	containers, err := d.List(context.Background())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(containers) != 1 || containers[0].ID != "keep" {
+		t.Fatalf("containers = %#v, want only keep", containers)
 	}
 }
 

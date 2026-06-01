@@ -2,7 +2,10 @@ package discover
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Option mutates Config before validation in New.
@@ -58,6 +61,21 @@ func WithCache(path string, ttl time.Duration) Option {
 func WithErrorHandler(h ErrorHandler) Option {
 	return func(c *Config) {
 		c.ErrorHandler = h
+	}
+}
+
+// WithLogger configures structured diagnostic logging. A nil logger disables logging.
+func WithLogger(logger *slog.Logger) Option {
+	return func(c *Config) {
+		c.Logger = logger
+	}
+}
+
+// WithPrometheus registers low-cardinality discovery metrics with registerer.
+// A nil registerer disables Prometheus metrics.
+func WithPrometheus(registerer prometheus.Registerer) Option {
+	return func(c *Config) {
+		c.PrometheusRegisterer = registerer
 	}
 }
 

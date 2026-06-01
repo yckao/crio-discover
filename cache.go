@@ -22,6 +22,40 @@ func (noopDedupeStore) Seen(string) bool  { return false }
 func (noopDedupeStore) Mark(string) error { return nil }
 func (noopDedupeStore) Close() error      { return nil }
 
+type memoryDedupeStore struct {
+	ttl     time.Duration
+	now     func() time.Time
+	mu      sync.Mutex
+	entries map[string]fileCacheEntry
+}
+
+func newMemoryDedupeStore(ttl time.Duration, now func() time.Time) *memoryDedupeStore {
+	if now == nil {
+		now = time.Now
+	}
+	return &memoryDedupeStore{ttl: ttl, now: now, entries: map[string]fileCacheEntry{}}
+}
+
+func (s *memoryDedupeStore) Seen(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	pruneFileCacheEntries(s.entries, now)
+	entry, ok := s.entries[id]
+	return ok && entry.ExpiresAt.After(now)
+}
+
+func (s *memoryDedupeStore) Mark(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	s.entries[id] = fileCacheEntry{LastNotifiedAt: now, ExpiresAt: now.Add(s.ttl)}
+	pruneFileCacheEntries(s.entries, now)
+	return nil
+}
+
+func (s *memoryDedupeStore) Close() error { return nil }
+
 type fileCachePayload struct {
 	Version int                       `json:"version"`
 	Entries map[string]fileCacheEntry `json:"entries"`

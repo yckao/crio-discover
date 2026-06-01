@@ -2,7 +2,6 @@ package discover
 
 import (
 	"context"
-	"errors"
 	"fmt"
 )
 
@@ -11,9 +10,10 @@ type volumeResolver interface {
 }
 
 type discoverer struct {
-	config   Config
-	client   runtimeClient
-	resolver volumeResolver
+	config    Config
+	client    runtimeClient
+	resolver  volumeResolver
+	telemetry *telemetry
 }
 
 // New validates config, applies options, and returns the default Discoverer implementation.
@@ -21,14 +21,19 @@ func New(config Config, opts ...Option) (Discoverer, error) {
 	if err := applyOptions(&config, opts...); err != nil {
 		return nil, err
 	}
+	telemetry, err := newTelemetry(config)
+	if err != nil {
+		return nil, err
+	}
 	client, err := newGRPCRuntimeClient(config.CRISocketPath)
 	if err != nil {
 		return nil, err
 	}
 	return &discoverer{
-		config:   config,
-		client:   client,
-		resolver: newKubeletVolumeResolver(config.KubeletRoot),
+		config:    config,
+		client:    client,
+		resolver:  newKubeletVolumeResolver(config.KubeletRoot),
+		telemetry: telemetry,
 	}, nil
 }
 
@@ -40,10 +45,13 @@ func (d *discoverer) Close() error {
 }
 
 func (d *discoverer) List(ctx context.Context) ([]Container, error) {
-	if d.client == nil {
-		return nil, errors.New("runtime client is nil")
+	if ctx == nil {
+		return nil, ErrNilContext
 	}
-	containers, err := d.client.ListContainers(ctx)
+	if d.client == nil {
+		return nil, ErrMissingRuntimeClient
+	}
+	containers, err := d.listRuntimeContainers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list containers: %w", err)
 	}
@@ -52,8 +60,11 @@ func (d *discoverer) List(ctx context.Context) ([]Container, error) {
 		if candidate.State != ContainerStateRunning {
 			continue
 		}
-		status, err := d.client.ContainerStatus(ctx, candidate.ID)
+		status, err := d.runtimeContainerStatus(ctx, candidate.ID)
 		if err != nil {
+			if isContainerGoneError(err) {
+				continue
+			}
 			return nil, fmt.Errorf("container status %s: %w", candidate.ID, err)
 		}
 		if status.State != ContainerStateRunning {

@@ -2,7 +2,10 @@ package discover
 
 import (
 	"context"
+	"log/slog"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Discoverer is the public interface implemented by this package.
@@ -25,14 +28,16 @@ type Predicate func(Container) bool
 
 // Config controls CRI-O discovery behavior.
 type Config struct {
-	CRISocketPath   string
-	KubeletRoot     string
-	PollInterval    time.Duration
-	EnableEvents    bool
-	NotificationTTL time.Duration
-	CachePath       string
-	Predicates      []Predicate
-	ErrorHandler    ErrorHandler
+	CRISocketPath        string
+	KubeletRoot          string
+	PollInterval         time.Duration
+	EnableEvents         bool
+	NotificationTTL      time.Duration
+	CachePath            string
+	Predicates           []Predicate
+	ErrorHandler         ErrorHandler
+	Logger               *slog.Logger
+	PrometheusRegisterer prometheus.Registerer
 }
 
 // ContainerState is a normalized CRI container state.

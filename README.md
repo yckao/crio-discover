@@ -51,6 +51,23 @@ func main() {
 }
 ```
 
+## Observability
+
+`WithLogger` emits structured recoverable diagnostics through `log/slog`.
+`WithPrometheus` registers low-cardinality metrics with a Prometheus registerer.
+
+```go
+registry := prometheus.NewRegistry()
+logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+d, err := discover.New(discover.DefaultConfig(),
+    discover.WithLogger(logger),
+    discover.WithPrometheus(registry),
+)
+```
+
+Metrics avoid Kubernetes labels, annotations, host paths, and full container IDs as labels.
+
 ## CRI-O 1.24 compatibility
 
 CRI-O 1.24 supports the CRI `runtime.v1` `ListContainers` and `ContainerStatus` calls used for reliable discovery. It does not support the newer `GetContainerEvents` RPC, so event acceleration is automatically treated as unsupported and polling remains authoritative. You can leave events enabled safely, or use `discover.WithEvents(false)` to avoid the extra unsupported-events probe on CRI-O 1.24-only deployments.
