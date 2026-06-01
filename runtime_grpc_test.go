@@ -1,0 +1,61 @@
+package criodiscovery
+
+import (
+	"testing"
+	"time"
+
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
+)
+
+func TestMapContainerState(t *testing.T) {
+	tests := []struct {
+		in   runtimeapi.ContainerState
+		want ContainerState
+	}{
+		{runtimeapi.ContainerState_CONTAINER_CREATED, ContainerStateCreated},
+		{runtimeapi.ContainerState_CONTAINER_RUNNING, ContainerStateRunning},
+		{runtimeapi.ContainerState_CONTAINER_EXITED, ContainerStateExited},
+		{runtimeapi.ContainerState_CONTAINER_UNKNOWN, ContainerStateUnknown},
+	}
+	for _, tt := range tests {
+		if got := mapContainerState(tt.in); got != tt.want {
+			t.Fatalf("state %s = %s", tt.in.String(), got)
+		}
+	}
+}
+
+func TestMapRuntimeStatus(t *testing.T) {
+	created := time.Date(2026, 6, 1, 0, 0, 0, 123, time.UTC)
+	status := &runtimeapi.ContainerStatus{
+		Id:          "id",
+		Metadata:    &runtimeapi.ContainerMetadata{Name: "app", Attempt: 3},
+		State:       runtimeapi.ContainerState_CONTAINER_RUNNING,
+		CreatedAt:   created.UnixNano(),
+		Image:       &runtimeapi.ImageSpec{Image: "resolved", UserSpecifiedImage: "user/app:v1", RuntimeHandler: "runc"},
+		ImageRef:    "sha256:abc",
+		ImageId:     "image-id",
+		Labels:      map[string]string{"label": "value"},
+		Annotations: map[string]string{"annotation": "value"},
+		Mounts:      []*runtimeapi.Mount{{HostPath: "/host", ContainerPath: "/container", Readonly: true, Propagation: runtimeapi.MountPropagation_PROPAGATION_PRIVATE}},
+	}
+	got := mapRuntimeStatus(status, "sandbox")
+	if got.ID != "id" || got.PodSandboxID != "sandbox" || got.Name != "app" || got.Attempt != 3 {
+		t.Fatalf("identity = %#v", got)
+	}
+	if got.Image != "user/app:v1" || got.ImageRef != "sha256:abc" || got.ImageID != "image-id" || got.RuntimeHandler != "runc" {
+		t.Fatalf("image/runtime = %#v", got)
+	}
+	if !got.CreatedAt.Equal(created) || got.State != ContainerStateRunning {
+		t.Fatalf("state/time = %#v", got)
+	}
+	if len(got.Mounts) != 1 || got.Mounts[0].HostPath != "/host" || got.Mounts[0].Propagation != "PROPAGATION_PRIVATE" {
+		t.Fatalf("mounts = %#v", got.Mounts)
+	}
+}
+
+func TestMapRuntimeEvent(t *testing.T) {
+	event := mapRuntimeEvent(&runtimeapi.ContainerEventResponse{ContainerId: "id", ContainerEventType: runtimeapi.ContainerEventType_CONTAINER_STARTED_EVENT})
+	if event.ContainerID != "id" || event.Type != runtimeEventStarted {
+		t.Fatalf("event = %#v", event)
+	}
+}

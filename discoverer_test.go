@@ -96,17 +96,6 @@ func TestListRequiresRuntimeClient(t *testing.T) {
 	}
 }
 
-func TestNewDefaultConfigListFailsClosedWhileRuntimeGRPCStubbed(t *testing.T) {
-	discoverer, err := New(DefaultConfig())
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	_, err = discoverer.List(context.Background())
-	if !errors.Is(err, errRuntimeClientNotImplemented) {
-		t.Fatalf("expected runtime client not implemented error, got %v", err)
-	}
-}
-
 func TestListFiltersCandidatesStatusesAndPredicates(t *testing.T) {
 	labels := func(namespace, containerName string) map[string]string {
 		return map[string]string{
