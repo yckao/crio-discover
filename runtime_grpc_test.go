@@ -56,6 +56,37 @@ func TestMapRuntimeStatus(t *testing.T) {
 	}
 }
 
+func TestMapRuntimeStatusHandlesCRIO124ShapedStatus(t *testing.T) {
+	created := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	status := &runtimeapi.ContainerStatus{
+		Id:        "id",
+		Metadata:  &runtimeapi.ContainerMetadata{Name: "app"},
+		State:     runtimeapi.ContainerState_CONTAINER_RUNNING,
+		CreatedAt: created.UnixNano(),
+		Image:     &runtimeapi.ImageSpec{Image: "registry/app:v1"},
+		ImageRef:  "sha256:abc",
+		Labels: map[string]string{
+			"io.kubernetes.pod.namespace": "default",
+			"io.kubernetes.pod.uid":       "pod-uid",
+		},
+		Mounts: []*runtimeapi.Mount{{HostPath: "/host", ContainerPath: "/container", Readonly: true}},
+	}
+
+	got := mapRuntimeStatus(status, "sandbox")
+	if got.Image != "registry/app:v1" {
+		t.Fatalf("Image = %q, want registry/app:v1", got.Image)
+	}
+	if got.ImageID != "" {
+		t.Fatalf("ImageID = %q, want empty for CRI-O 1.24-shaped status", got.ImageID)
+	}
+	if got.RuntimeHandler != "" {
+		t.Fatalf("RuntimeHandler = %q, want empty for CRI-O 1.24-shaped status", got.RuntimeHandler)
+	}
+	if got.PodSandboxID != "sandbox" || got.Labels["io.kubernetes.pod.uid"] != "pod-uid" || len(got.Mounts) != 1 {
+		t.Fatalf("mapped status = %#v", got)
+	}
+}
+
 func TestMapRuntimeEvent(t *testing.T) {
 	event := mapRuntimeEvent(&runtimeapi.ContainerEventResponse{ContainerId: "id", ContainerEventType: runtimeapi.ContainerEventType_CONTAINER_STARTED_EVENT})
 	if event.ContainerID != "id" || event.Type != runtimeEventStarted {

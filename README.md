@@ -51,6 +51,12 @@ func main() {
 }
 ```
 
+## CRI-O 1.24 compatibility
+
+CRI-O 1.24 supports the CRI `runtime.v1` `ListContainers` and `ContainerStatus` calls used for reliable discovery. It does not support the newer `GetContainerEvents` RPC, so event acceleration is automatically treated as unsupported and polling remains authoritative. You can leave events enabled safely, or use `discover.WithEvents(false)` to avoid the extra unsupported-events probe on CRI-O 1.24-only deployments.
+
+On CRI-O 1.24, newer runtime metadata fields such as image ID and runtime handler may be empty. The library falls back to CRI-O 1.24-era fields and list-time metadata for Kubernetes identity and volume inference.
+
 ## Notes
 
 - `List` does not use or update the notification cache.

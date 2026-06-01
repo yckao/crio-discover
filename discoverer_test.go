@@ -58,6 +58,25 @@ func TestContainerFromRuntimeParsesKubernetesMetadata(t *testing.T) {
 	}
 }
 
+func TestContainerFromRuntimeUsesSandboxLabelAsPodIDWhenRuntimeOmitsPodSandboxID(t *testing.T) {
+	d := &discoverer{config: DefaultConfig(), resolver: staticVolumeResolver{}}
+	container := d.containerFromRuntime(runtimeContainer{
+		ID:    "container-id",
+		Name:  "app",
+		State: ContainerStateRunning,
+		Labels: map[string]string{
+			"io.kubernetes.sandbox.id": "sandbox-from-label",
+		},
+	})
+
+	if container.PodID != "sandbox-from-label" {
+		t.Fatalf("PodID = %q, want sandbox-from-label", container.PodID)
+	}
+	if container.Kubernetes.SandboxID != "sandbox-from-label" {
+		t.Fatalf("Kubernetes.SandboxID = %q, want sandbox-from-label", container.Kubernetes.SandboxID)
+	}
+}
+
 func TestMatchesRequiresAllPredicates(t *testing.T) {
 	d := &discoverer{config: Config{Predicates: []Predicate{
 		func(c Container) bool { return c.Kubernetes.Namespace == "default" },
@@ -107,6 +126,58 @@ func TestCloseCallsRuntimeClient(t *testing.T) {
 	client.mu.Unlock()
 	if !closed {
 		t.Fatal("runtime client was not closed")
+	}
+}
+
+func TestListUsesCandidateMetadataWhenStatusOmitsLabels(t *testing.T) {
+	client := &fakeRuntimeClient{
+		listed: []runtimeContainer{{
+			ID:           "running",
+			PodSandboxID: "sandbox-from-list",
+			Name:         "app",
+			Image:        "app:v1",
+			State:        ContainerStateRunning,
+			Labels: map[string]string{
+				"io.kubernetes.pod.namespace":  "default",
+				"io.kubernetes.pod.name":       "demo",
+				"io.kubernetes.pod.uid":        "pod-uid",
+				"io.kubernetes.container.name": "app",
+			},
+		}},
+		statuses: map[string]runtimeContainer{
+			"running": {
+				ID:    "running",
+				State: ContainerStateRunning,
+				Mounts: []runtimeMount{{
+					HostPath:      "/var/lib/kubelet/pods/pod-uid/volumes/kubernetes.io~secret/token",
+					ContainerPath: "/var/run/secrets/token",
+				}},
+			},
+		},
+	}
+	cfg := DefaultConfig()
+	cfg.Predicates = []Predicate{func(c Container) bool { return c.Kubernetes.Namespace == "default" }}
+	d := &discoverer{config: cfg, client: client, resolver: newKubeletVolumeResolver("/var/lib/kubelet")}
+
+	containers, err := d.List(context.Background())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(containers) != 1 {
+		t.Fatalf("containers = %#v, want one container", containers)
+	}
+	got := containers[0]
+	if got.PodID != "sandbox-from-list" || got.Kubernetes.SandboxID != "sandbox-from-list" {
+		t.Fatalf("sandbox metadata = PodID %q Kubernetes %#v", got.PodID, got.Kubernetes)
+	}
+	if got.Kubernetes.Namespace != "default" || got.Kubernetes.PodUID != "pod-uid" || got.Kubernetes.ContainerName != "app" {
+		t.Fatalf("kubernetes metadata = %#v", got.Kubernetes)
+	}
+	if got.Image != "app:v1" || got.Name != "app" {
+		t.Fatalf("candidate identity fallback failed: %#v", got)
+	}
+	if len(got.Volumes) != 1 || got.Volumes[0].Type != VolumeTypeSecret || got.Volumes[0].Name != "token" {
+		t.Fatalf("volumes = %#v", got.Volumes)
 	}
 }
 

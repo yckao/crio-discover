@@ -304,6 +304,12 @@ func TestEventWatcherSuppressesUnimplementedSetupError(t *testing.T) {
 	if err := d.Watch(ctx, func(context.Context, Container) error { return nil }); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Watch error = %v", err)
 	}
+	client.mu.Lock()
+	listCalls := client.listCalls
+	client.mu.Unlock()
+	if listCalls < 2 {
+		t.Fatalf("list calls = %d, want polling to continue after unsupported events", listCalls)
+	}
 	select {
 	case err := <-reported:
 		t.Fatalf("unexpected reported error: %v", err)

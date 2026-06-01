@@ -94,7 +94,7 @@ func (d *discoverer) watch(ctx context.Context, handler Handler, report func(err
 			if event.containerID == "" {
 				continue
 			}
-			if err := d.handleContainerID(ctx, event.containerID, "", cache, handler, report); err != nil {
+			if err := d.handleContainerID(ctx, event.containerID, runtimeContainer{}, cache, handler, report); err != nil {
 				return err
 			}
 		}
@@ -124,7 +124,7 @@ func (d *discoverer) scanAndHandle(ctx context.Context, cache dedupeStore, handl
 		if candidate.State != ContainerStateRunning {
 			continue
 		}
-		if err := d.handleContainerID(ctx, candidate.ID, candidate.PodSandboxID, cache, handler, report); err != nil {
+		if err := d.handleContainerID(ctx, candidate.ID, candidate, cache, handler, report); err != nil {
 			return err
 		}
 		if err := ctx.Err(); err != nil {
@@ -134,7 +134,7 @@ func (d *discoverer) scanAndHandle(ctx context.Context, cache dedupeStore, handl
 	return ctx.Err()
 }
 
-func (d *discoverer) handleContainerID(ctx context.Context, id, fallbackSandboxID string, cache dedupeStore, handler Handler, report func(error)) error {
+func (d *discoverer) handleContainerID(ctx context.Context, id string, fallback runtimeContainer, cache dedupeStore, handler Handler, report func(error)) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -149,9 +149,7 @@ func (d *discoverer) handleContainerID(ctx context.Context, id, fallbackSandboxI
 	if status.State != ContainerStateRunning {
 		return nil
 	}
-	if status.PodSandboxID == "" {
-		status.PodSandboxID = fallbackSandboxID
-	}
+	status = runtimeContainerWithFallback(status, fallback)
 	container := d.containerFromRuntime(status)
 	if !d.matches(container) {
 		return nil

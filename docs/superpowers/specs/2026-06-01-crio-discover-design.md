@@ -290,6 +290,12 @@ Suggested JSON shape:
 }
 ```
 
+## CRI-O 1.24 compatibility
+
+The library targets runtime compatibility with CRI-O 1.24 while keeping a newer Go CRI API dependency. CRI-O 1.24 supports the CRI `runtime.v1` `ListContainers` and `ContainerStatus` calls used by `List`, polling `Watch`, metadata enrichment, and volume discovery. CRI-O 1.24 does not support the newer `GetContainerEvents` streaming RPC, so `codes.Unimplemented` from event setup or receive is treated as unsupported events rather than a watch failure. Polling remains authoritative and continues.
+
+CRI-O 1.24-era responses may omit newer metadata fields such as image ID, runtime handler, and user-specified image. The mapper tolerates those empty fields and falls back to the older image field. When `ContainerStatus` omits labels, annotations, or sandbox identity that were present in `ListContainers`, the library preserves list-time metadata so Kubernetes identity parsing and kubelet volume inference still work.
+
 ## Event acceleration and polling reliability
 
 Polling is the reliability baseline. It handles:
@@ -302,6 +308,7 @@ Polling is the reliability baseline. It handles:
 Event acceleration is optional and best effort:
 
 - If enabled, the library listens for CRI container events when supported.
+- On CRI-O 1.24, event acceleration is expected to be unsupported; this is silently disabled and polling continues.
 - Event-discovered candidates go through the same status fetch, enrichment, filtering, and cache checks as polling-discovered candidates.
 - Event watcher errors are sent to the error path but do not stop polling.
 - Polling periodically reconciles state and remains authoritative.
@@ -336,6 +343,9 @@ Fake CRI client tests:
 - Duplicate notifications are suppressed within TTL.
 - Expired TTL allows a later notification.
 - Event watcher failure does not stop polling.
+- CRI-O 1.24 unsupported-event responses do not report recoverable errors and do not stop polling.
+- CRI-O 1.24-shaped status responses without newer fields still map correctly.
+- List-time Kubernetes labels and sandbox metadata are preserved when status responses omit them.
 - Predicate filtering happens after volume enrichment.
 
 Integration tests, when a CRI-O environment is available:

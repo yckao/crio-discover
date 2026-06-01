@@ -59,9 +59,7 @@ func (d *discoverer) List(ctx context.Context) ([]Container, error) {
 		if status.State != ContainerStateRunning {
 			continue
 		}
-		if status.PodSandboxID == "" {
-			status.PodSandboxID = candidate.PodSandboxID
-		}
+		status = runtimeContainerWithFallback(status, candidate)
 		container := d.containerFromRuntime(status)
 		if d.matches(container) {
 			result = append(result, container)
@@ -74,13 +72,17 @@ func (d *discoverer) containerFromRuntime(rc runtimeContainer) Container {
 	labels := cloneStringMap(rc.Labels)
 	annotations := cloneStringMap(rc.Annotations)
 	kubernetes := kubernetesMetadataFromRuntime(rc, labels)
+	podID := rc.PodSandboxID
+	if podID == "" {
+		podID = kubernetes.SandboxID
+	}
 	resolver := d.resolver
 	if resolver == nil {
 		resolver = newKubeletVolumeResolver(d.config.KubeletRoot)
 	}
 	return Container{
 		ID:          rc.ID,
-		PodID:       rc.PodSandboxID,
+		PodID:       podID,
 		Name:        rc.Name,
 		Image:       rc.Image,
 		ImageRef:    rc.ImageRef,
@@ -97,6 +99,37 @@ func (d *discoverer) containerFromRuntime(rc runtimeContainer) Container {
 		},
 		Volumes: resolver.Resolve(kubernetes.PodUID, rc.Mounts),
 	}
+}
+
+func runtimeContainerWithFallback(status, fallback runtimeContainer) runtimeContainer {
+	if status.PodSandboxID == "" {
+		status.PodSandboxID = fallback.PodSandboxID
+	}
+	if status.Name == "" {
+		status.Name = fallback.Name
+	}
+	if status.Image == "" {
+		status.Image = fallback.Image
+	}
+	if status.ImageRef == "" {
+		status.ImageRef = fallback.ImageRef
+	}
+	if status.ImageID == "" {
+		status.ImageID = fallback.ImageID
+	}
+	if status.RuntimeHandler == "" {
+		status.RuntimeHandler = fallback.RuntimeHandler
+	}
+	if status.CreatedAt.IsZero() {
+		status.CreatedAt = fallback.CreatedAt
+	}
+	if len(status.Labels) == 0 {
+		status.Labels = fallback.Labels
+	}
+	if len(status.Annotations) == 0 {
+		status.Annotations = fallback.Annotations
+	}
+	return status
 }
 
 func kubernetesMetadataFromRuntime(rc runtimeContainer, labels map[string]string) KubernetesMetadata {
