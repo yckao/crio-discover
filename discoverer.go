@@ -97,6 +97,7 @@ func (d *discoverer) containerFromRuntime(rc runtimeContainer) Container {
 		Name:        rc.Name,
 		Image:       rc.Image,
 		ImageRef:    rc.ImageRef,
+		RootPath:    rc.RootPath,
 		State:       rc.State,
 		CreatedAt:   rc.CreatedAt,
 		Labels:      labels,
@@ -130,6 +131,9 @@ func runtimeContainerWithFallback(status, fallback runtimeContainer) runtimeCont
 	}
 	if status.RuntimeHandler == "" {
 		status.RuntimeHandler = fallback.RuntimeHandler
+	}
+	if status.RootPath == "" {
+		status.RootPath = fallback.RootPath
 	}
 	if status.CreatedAt.IsZero() {
 		status.CreatedAt = fallback.CreatedAt

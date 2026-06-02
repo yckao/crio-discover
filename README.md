@@ -10,6 +10,7 @@ Go library for discovering running CRI-O containers through the local Kubernetes
 - Polling-first reliability with optional CRI event acceleration.
 - Predicate-only filtering with ordinary Go functions.
 - Volume metadata from CRI mounts with best-effort kubelet path inference.
+- Container root filesystem path from CRI-O verbose status metadata when available.
 - Persistent TTL cache to suppress duplicate watch notifications across restarts.
 
 ## Basic usage
@@ -80,3 +81,4 @@ On CRI-O 1.24, newer runtime metadata fields such as image ID and runtime handle
 - `Watch` and `WatchChan` use the cache only when `NotificationTTL > 0` and `CachePath` is set.
 - Polling remains authoritative even when CRI event acceleration is enabled.
 - Volume type inference is best effort and does not use the Kubernetes API.
+- `Container.RootPath` is reported separately from `Container.Volumes` because the OCI root filesystem is not a Kubernetes volume mount.

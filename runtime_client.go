@@ -25,6 +25,7 @@ type runtimeContainer struct {
 	ImageRef       string
 	ImageID        string
 	RuntimeHandler string
+	RootPath       string
 	State          ContainerState
 	CreatedAt      time.Time
 	Labels         map[string]string
