@@ -220,6 +220,7 @@ Supported best-effort volume types:
 - `VolumeTypeProjected`
 - `VolumeTypePersistentVolumeClaim`
 - `VolumeTypeDownwardAPI`
+- `VolumeTypeVolumeSubpaths`
 - `VolumeTypeUnknown`
 
 Volume resolution uses two inputs:
