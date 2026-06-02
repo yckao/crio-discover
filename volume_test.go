@@ -50,7 +50,7 @@ func TestVolumeResolverHandlesVolumeSubpaths(t *testing.T) {
 	if len(volumes) != 1 {
 		t.Fatalf("volumes = %d", len(volumes))
 	}
-	if volumes[0].Name != "config" || volumes[0].Type != VolumeTypeUnknown || volumes[0].Source != "volume-subpaths" {
+	if volumes[0].Name != "config" || volumes[0].Type != VolumeTypeVolumeSubpaths || volumes[0].Source != "volume-subpaths" {
 		t.Fatalf("volume = %#v", volumes[0])
 	}
 }

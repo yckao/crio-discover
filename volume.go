@@ -60,7 +60,7 @@ func (r *kubeletVolumeResolver) infer(podUID, hostPath string) (VolumeType, stri
 		}
 		parts := strings.Split(rel, string(filepath.Separator))
 		if len(parts) >= 1 && parts[0] != "" {
-			return VolumeTypeUnknown, parts[0], "volume-subpaths"
+			return VolumeTypeVolumeSubpaths, parts[0], "volume-subpaths"
 		}
 	}
 

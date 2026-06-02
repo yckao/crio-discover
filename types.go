@@ -61,6 +61,7 @@ const (
 	VolumeTypeProjected             VolumeType = "projected"
 	VolumeTypePersistentVolumeClaim VolumeType = "persistentVolumeClaim"
 	VolumeTypeDownwardAPI           VolumeType = "downwardAPI"
+	VolumeTypeVolumeSubpaths        VolumeType = "volume-subpaths"
 	VolumeTypeUnknown               VolumeType = "unknown"
 )
 
