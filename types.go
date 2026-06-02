@@ -66,11 +66,14 @@ const (
 
 // Container is normalized metadata for a running CRI container.
 type Container struct {
-	ID          string
-	PodID       string
-	Name        string
-	Image       string
-	ImageRef    string
+	ID       string
+	PodID    string
+	Name     string
+	Image    string
+	ImageRef string
+	// RootPath is the OCI root filesystem path reported by CRI-O for the container.
+	// It is not included in Volumes because it describes the container rootfs, not a Kubernetes mount.
+	RootPath    string
 	State       ContainerState
 	CreatedAt   time.Time
 	Labels      map[string]string

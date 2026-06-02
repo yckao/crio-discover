@@ -41,11 +41,11 @@ func TestMapRuntimeStatus(t *testing.T) {
 		Annotations: map[string]string{"annotation": "value"},
 		Mounts:      []*runtimeapi.Mount{{HostPath: "/host", ContainerPath: "/container", Readonly: true, Propagation: runtimeapi.MountPropagation_PROPAGATION_PRIVATE}},
 	}
-	got := mapRuntimeStatus(status, "sandbox")
+	got := mapRuntimeStatus(status, "sandbox", map[string]string{"info": `{"runtimeSpec":{"root":{"path":"/var/lib/containers/storage/overlay/rootfs"}}}`})
 	if got.ID != "id" || got.PodSandboxID != "sandbox" || got.Name != "app" || got.Attempt != 3 {
 		t.Fatalf("identity = %#v", got)
 	}
-	if got.Image != "user/app:v1" || got.ImageRef != "sha256:abc" || got.ImageID != "image-id" || got.RuntimeHandler != "runc" {
+	if got.Image != "user/app:v1" || got.ImageRef != "sha256:abc" || got.ImageID != "image-id" || got.RuntimeHandler != "runc" || got.RootPath != "/var/lib/containers/storage/overlay/rootfs" {
 		t.Fatalf("image/runtime = %#v", got)
 	}
 	if !got.CreatedAt.Equal(created) || got.State != ContainerStateRunning {
@@ -72,7 +72,7 @@ func TestMapRuntimeStatusHandlesCRIO124ShapedStatus(t *testing.T) {
 		Mounts: []*runtimeapi.Mount{{HostPath: "/host", ContainerPath: "/container", Readonly: true}},
 	}
 
-	got := mapRuntimeStatus(status, "sandbox")
+	got := mapRuntimeStatus(status, "sandbox", nil)
 	if got.Image != "registry/app:v1" {
 		t.Fatalf("Image = %q, want registry/app:v1", got.Image)
 	}
@@ -84,6 +84,15 @@ func TestMapRuntimeStatusHandlesCRIO124ShapedStatus(t *testing.T) {
 	}
 	if got.PodSandboxID != "sandbox" || got.Labels["io.kubernetes.pod.uid"] != "pod-uid" || len(got.Mounts) != 1 {
 		t.Fatalf("mapped status = %#v", got)
+	}
+}
+
+func TestRootPathFromCRIInfoHandlesMissingAndInvalidInfo(t *testing.T) {
+	if got := rootPathFromCRIInfo(nil); got != "" {
+		t.Fatalf("nil info RootPath = %q, want empty", got)
+	}
+	if got := rootPathFromCRIInfo(map[string]string{"info": "not-json"}); got != "" {
+		t.Fatalf("invalid info RootPath = %q, want empty", got)
 	}
 }
 

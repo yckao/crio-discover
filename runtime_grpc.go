@@ -2,6 +2,7 @@ package discover
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -38,7 +39,7 @@ func (c *grpcRuntimeClient) ListContainers(ctx context.Context) ([]runtimeContai
 }
 
 func (c *grpcRuntimeClient) ContainerStatus(ctx context.Context, id string) (runtimeContainer, error) {
-	resp, err := c.client.ContainerStatus(ctx, &runtimeapi.ContainerStatusRequest{ContainerId: id, Verbose: false})
+	resp, err := c.client.ContainerStatus(ctx, &runtimeapi.ContainerStatusRequest{ContainerId: id, Verbose: true})
 	if err != nil {
 		return runtimeContainer{}, err
 	}
@@ -46,7 +47,7 @@ func (c *grpcRuntimeClient) ContainerStatus(ctx context.Context, id string) (run
 	if status == nil {
 		return runtimeContainer{}, fmt.Errorf("container status %s is nil", id)
 	}
-	return mapRuntimeStatus(status, ""), nil
+	return mapRuntimeStatus(status, "", resp.GetInfo()), nil
 }
 
 func (c *grpcRuntimeClient) WatchEvents(ctx context.Context) (runtimeEventStream, error) {
@@ -103,7 +104,7 @@ func mapRuntimeContainer(container *runtimeapi.Container) runtimeContainer {
 	}
 }
 
-func mapRuntimeStatus(status *runtimeapi.ContainerStatus, sandboxID string) runtimeContainer {
+func mapRuntimeStatus(status *runtimeapi.ContainerStatus, sandboxID string, info map[string]string) runtimeContainer {
 	metadata := status.GetMetadata()
 	mounts := make([]runtimeMount, 0, len(status.GetMounts()))
 	for _, mount := range status.GetMounts() {
@@ -123,12 +124,30 @@ func mapRuntimeStatus(status *runtimeapi.ContainerStatus, sandboxID string) runt
 		ImageRef:       status.GetImageRef(),
 		ImageID:        status.GetImageId(),
 		RuntimeHandler: status.GetImage().GetRuntimeHandler(),
+		RootPath:       rootPathFromCRIInfo(info),
 		State:          mapContainerState(status.GetState()),
 		CreatedAt:      unixNanoToTime(status.GetCreatedAt()),
 		Labels:         status.GetLabels(),
 		Annotations:    status.GetAnnotations(),
 		Mounts:         mounts,
 	}
+}
+
+func rootPathFromCRIInfo(info map[string]string) string {
+	if len(info) == 0 || info["info"] == "" {
+		return ""
+	}
+	var parsed struct {
+		RuntimeSpec struct {
+			Root struct {
+				Path string `json:"path"`
+			} `json:"root"`
+		} `json:"runtimeSpec"`
+	}
+	if err := json.Unmarshal([]byte(info["info"]), &parsed); err != nil {
+		return ""
+	}
+	return parsed.RuntimeSpec.Root.Path
 }
 
 func mapRuntimeEvent(resp *runtimeapi.ContainerEventResponse) runtimeEvent {

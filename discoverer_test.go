@@ -26,6 +26,7 @@ func TestContainerFromRuntimeParsesKubernetesMetadata(t *testing.T) {
 		ImageRef:       "sha256:abc",
 		ImageID:        "image-id",
 		RuntimeHandler: "runc",
+		RootPath:       "/var/lib/containers/storage/overlay/rootfs",
 		State:          ContainerStateRunning,
 		CreatedAt:      created,
 		Labels: map[string]string{
@@ -52,6 +53,9 @@ func TestContainerFromRuntimeParsesKubernetesMetadata(t *testing.T) {
 	if container.Runtime.RuntimeHandler != "runc" || container.Runtime.ImageID != "image-id" {
 		t.Fatalf("unexpected runtime metadata: %#v", container.Runtime)
 	}
+	if container.RootPath != "/var/lib/containers/storage/overlay/rootfs" {
+		t.Fatalf("RootPath = %q, want container rootfs path", container.RootPath)
+	}
 	if container.Labels["custom"] != "value" || container.Runtime.RawLabels["custom"] != "value" {
 		t.Fatalf("labels were not copied: %#v %#v", container.Labels, container.Runtime.RawLabels)
 	}
@@ -77,6 +81,26 @@ func TestContainerFromRuntimeUsesSandboxLabelAsPodIDWhenRuntimeOmitsPodSandboxID
 	}
 	if container.Kubernetes.SandboxID != "sandbox-from-label" {
 		t.Fatalf("Kubernetes.SandboxID = %q, want sandbox-from-label", container.Kubernetes.SandboxID)
+	}
+}
+
+func TestRuntimeContainerWithFallbackPreservesStatusRootPath(t *testing.T) {
+	got := runtimeContainerWithFallback(
+		runtimeContainer{ID: "id", RootPath: "/status/rootfs"},
+		runtimeContainer{ID: "id", RootPath: "/list/rootfs"},
+	)
+	if got.RootPath != "/status/rootfs" {
+		t.Fatalf("RootPath = %q, want status root path", got.RootPath)
+	}
+}
+
+func TestRuntimeContainerWithFallbackUsesCandidateRootPath(t *testing.T) {
+	got := runtimeContainerWithFallback(
+		runtimeContainer{ID: "id"},
+		runtimeContainer{ID: "id", RootPath: "/list/rootfs"},
+	)
+	if got.RootPath != "/list/rootfs" {
+		t.Fatalf("RootPath = %q, want fallback root path", got.RootPath)
 	}
 }
 
