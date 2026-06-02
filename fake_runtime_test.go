@@ -12,9 +12,11 @@ type fakeRuntimeClient struct {
 	listed       []runtimeContainer
 	statuses     map[string]runtimeContainer
 	listErr      error
+	listErrs     []error
 	listErrAfter int
 	listCalls    int
 	statusErr    map[string]error
+	statusErrs   map[string][]error
 	eventStream  runtimeEventStream
 	eventErr     error
 	closed       bool
@@ -25,6 +27,13 @@ func (f *fakeRuntimeClient) ListContainers(context.Context) ([]runtimeContainer,
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.listCalls++
+	if len(f.listErrs) > 0 {
+		err := f.listErrs[0]
+		f.listErrs = f.listErrs[1:]
+		if err != nil {
+			return nil, err
+		}
+	}
 	if f.listErr != nil && (f.listErrAfter == 0 || f.listCalls > f.listErrAfter) {
 		return nil, f.listErr
 	}
@@ -36,6 +45,13 @@ func (f *fakeRuntimeClient) ContainerStatus(_ context.Context, id string) (runti
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.statusCalls = append(f.statusCalls, id)
+	if len(f.statusErrs[id]) > 0 {
+		err := f.statusErrs[id][0]
+		f.statusErrs[id] = f.statusErrs[id][1:]
+		if err != nil {
+			return runtimeContainer{}, err
+		}
+	}
 	if err := f.statusErr[id]; err != nil {
 		return runtimeContainer{}, err
 	}

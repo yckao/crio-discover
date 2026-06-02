@@ -14,10 +14,13 @@ type Option func(*Config)
 // DefaultConfig returns production-oriented defaults for CRI-O on Kubernetes nodes.
 func DefaultConfig() Config {
 	return Config{
-		CRISocketPath: "/var/run/crio/crio.sock",
-		KubeletRoot:   "/var/lib/kubelet",
-		PollInterval:  30 * time.Second,
-		EnableEvents:  true,
+		CRISocketPath:              "/var/run/crio/crio.sock",
+		KubeletRoot:                "/var/lib/kubelet",
+		PollInterval:               30 * time.Second,
+		EnableEvents:               true,
+		RuntimeRetryLimit:          3,
+		RuntimeRetryInitialBackoff: 100 * time.Millisecond,
+		RuntimeRetryMaxBackoff:     time.Second,
 	}
 }
 
@@ -46,6 +49,16 @@ func WithPollInterval(d time.Duration) Option {
 func WithEvents(enabled bool) Option {
 	return func(c *Config) {
 		c.EnableEvents = enabled
+	}
+}
+
+// WithRuntimeRetry configures bounded exponential retry for CRI runtime RPC timeouts.
+// limit is the number of retries after the initial attempt. Set limit to 0 to disable retries.
+func WithRuntimeRetry(limit int, initialBackoff, maxBackoff time.Duration) Option {
+	return func(c *Config) {
+		c.RuntimeRetryLimit = limit
+		c.RuntimeRetryInitialBackoff = initialBackoff
+		c.RuntimeRetryMaxBackoff = maxBackoff
 	}
 }
 
@@ -98,6 +111,18 @@ func validateConfig(config Config) error {
 	}
 	if config.PollInterval <= 0 {
 		return fmt.Errorf("poll interval must be positive")
+	}
+	if config.RuntimeRetryLimit < 0 {
+		return fmt.Errorf("runtime retry limit must not be negative")
+	}
+	if config.RuntimeRetryInitialBackoff < 0 {
+		return fmt.Errorf("runtime retry initial backoff must not be negative")
+	}
+	if config.RuntimeRetryMaxBackoff < 0 {
+		return fmt.Errorf("runtime retry max backoff must not be negative")
+	}
+	if config.RuntimeRetryLimit > 0 && config.RuntimeRetryMaxBackoff < config.RuntimeRetryInitialBackoff {
+		return fmt.Errorf("runtime retry max backoff must be greater than or equal to initial backoff")
 	}
 	if config.NotificationTTL < 0 {
 		return fmt.Errorf("notification TTL must not be negative")

@@ -28,16 +28,19 @@ type Predicate func(Container) bool
 
 // Config controls CRI-O discovery behavior.
 type Config struct {
-	CRISocketPath        string
-	KubeletRoot          string
-	PollInterval         time.Duration
-	EnableEvents         bool
-	NotificationTTL      time.Duration
-	CachePath            string
-	Predicates           []Predicate
-	ErrorHandler         ErrorHandler
-	Logger               *slog.Logger
-	PrometheusRegisterer prometheus.Registerer
+	CRISocketPath              string
+	KubeletRoot                string
+	PollInterval               time.Duration
+	EnableEvents               bool
+	RuntimeRetryLimit          int
+	RuntimeRetryInitialBackoff time.Duration
+	RuntimeRetryMaxBackoff     time.Duration
+	NotificationTTL            time.Duration
+	CachePath                  string
+	Predicates                 []Predicate
+	ErrorHandler               ErrorHandler
+	Logger                     *slog.Logger
+	PrometheusRegisterer       prometheus.Registerer
 }
 
 // ContainerState is a normalized CRI container state.
